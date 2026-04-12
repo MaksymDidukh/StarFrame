@@ -1,236 +1,186 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Сатурн — реальная картинка в трансцендентальных блоках</title>
-  <style>
-    body { margin:0; background:#000; overflow:hidden; }
-    canvas { display:block; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Rein Images</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: radial-gradient(circle at bottom, #1B2735 0%, #090A0F 100%);
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+
+<canvas id="spaceCanvas"></canvas>
 
 <script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-
-let w, h, cx, cy, planetRadius;
-
-const images = [];
-const planetBlocks = [];   // большие блоки — как на реальной фотографии
-const ringBlocks = [];     // мелкие блоки в кольцах
-
-// === РЕАЛЬНЫЙ САТУРН + ТВОИ КАРТИНКИ ===
-const saturnBaseUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Saturn_during_Equinox.jpg/1200px-Saturn_during_Equinox.jpg'; // высококачественная NASA-фотка
-const userUrls = [
-  'https://picsum.photos/id/1015/600/600',
-  'https://picsum.photos/id/237/600/600',
-  'https://picsum.photos/id/870/600/600',
-  'https://picsum.photos/id/133/600/600',
-  // добавь сюда свои мемные/тёмные/хаотичные картинки — они будут в кольцах
+// ==================== МАССИВ КАРТИНОК ЗВЁЗД (дополняй сколько угодно) ====================
+const starImagesUrls = [
+    "https://i.imgur.com/7ZfK8pL.png",   // основная красивая
+    "https://i.imgur.com/8vX9kLm.png",
+    "https://i.imgur.com/J3pL5qR.png",
+    "https://i.imgur.com/XkP9mN2.png",
+    // Добавляй новые сюда:
+    // "https://твоя-ссылка.png",
 ];
 
-function loadImages() {
-  // Сначала грузим реальную фотку Сатурна для планеты
-  const saturnImg = new Image();
-  saturnImg.crossOrigin = "anonymous";
-  saturnImg.src = saturnBaseUrl;
-  saturnImg.onload = () => {
-    images.push(saturnImg); // 0-й элемент — реальная картинка Сатурна
-    // Теперь грузим пользовательские для колец
+const starImages = [];
+
+function preloadImages(callback) {
     let loaded = 0;
-    userUrls.forEach(src => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = src;
-      img.onload = () => {
-        images.push(img);
-        loaded++;
-        if (loaded === userUrls.length) {
-          initPlanetBlocks();
-          initRingBlocks();
-        }
-      };
+    starImagesUrls.forEach((url, index) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        img.onload = () => {
+            starImages[index] = img;
+            loaded++;
+            if (loaded === starImagesUrls.length) callback();
+        };
+        img.onerror = () => {
+            console.warn(`Не загрузилась: ${url}`);
+            loaded++;
+            if (loaded === starImagesUrls.length) callback();
+        };
     });
-  };
 }
 
-class Block {
-  constructor(x, y, size, img, isRing = false) {
-    this.x = x;
-    this.y = y;
-    this.size = size;
-    this.img = img;
-    this.angle = Math.random() * Math.PI * 2;
-    this.speed = (Math.random() - 0.5) * (isRing ? 0.14 : 0.022);
-    this.isRing = isRing;
-    this.distort = 0;
-    this.opacity = 1;
-  }
-  update() {
-    this.angle += this.speed;
-    this.distort = Math.sin(Date.now() / 160) * (this.isRing ? 2.8 : 1.2);
-  }
-  draw() {
-    ctx.save();
-    ctx.globalAlpha = this.opacity;
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
+const canvas = document.getElementById('spaceCanvas');
+const ctx = canvas.getContext('2d');
 
-    ctx.shadowBlur = this.isRing ? 22 : 35;
-    ctx.shadowColor = this.isRing ? '#ff00cc' : '#aaffff';
+let stars = [];
+const starCount = 260;
+const groundHeight = 68;
+const connectDistance = 105;
 
-    ctx.drawImage(this.img, 
-      -this.size/2 + this.distort, 
-      -this.size/2, 
-      this.size + this.distort*2, 
-      this.size
-    );
-    ctx.restore();
-  }
-}
-
-// ====================== БОЛЬШИЕ БЛОКИ НА САТУРНЕ (как реальная фотка) ======================
-function initPlanetBlocks() {
-  planetBlocks.length = 0;
-  const grid = 18;                    // чуть больше деталей, но блоки всё ещё крупные
-  const blockSize = (planetRadius * 2) / grid * 1.12;
-
-  const saturnImage = images[0]; // реальная фотка
-
-  for (let i = 0; i < grid; i++) {
-    for (let j = 0; j < grid; j++) {
-      const x = cx - planetRadius + i * blockSize + blockSize/2;
-      const y = cy - planetRadius + j * blockSize + blockSize/2;
-
-      const dx = x - cx;
-      const dy = y - cy;
-      if (dx*dx + dy*dy > planetRadius * planetRadius) continue;
-
-      // Берём кусочек из РЕАЛЬНОЙ фотки Сатурна
-      const block = new Block(x, y, blockSize, saturnImage, false);
-      planetBlocks.push(block);
-    }
-  }
-}
-
-// ====================== МЕЛКИЕ БЛОКИ В КОЛЬЦАХ (много и красиво) ======================
-function initRingBlocks() {
-  ringBlocks.length = 0;
-  const ringCount = 7;                // больше колец для реализма
-  const blocksPerRing = 320;          // ещё плотнее
-
-  for (let r = 0; r < ringCount; r++) {
-    const baseRadius = planetRadius * (1.42 + r * 0.17);
-    const ringWidth = planetRadius * 0.145;
-
-    // Cassini Division — настоящий разрыв в кольцах
-    const hasGap = r === 2 || r === 3;
-
-    for (let i = 0; i < blocksPerRing; i++) {
-      let angle = (i / blocksPerRing) * Math.PI * 2 + r * 0.35;
-
-      // Пропускаем сектор для разрыва (Cassini Division)
-      if (hasGap && angle % (Math.PI * 2) > 1.8 && angle % (Math.PI * 2) < 2.4) continue;
-
-      const offset = (Math.random() - 0.5) * ringWidth * 1.4;
-
-      const x = cx + Math.cos(angle) * baseRadius;
-      const y = cy + Math.sin(angle) * baseRadius * 0.31 + offset; // классический наклон
-
-      const size = planetRadius * (0.028 + Math.random() * 0.035); // очень мелкие
-
-      const ringImg = images[Math.floor(Math.random() * (images.length - 1)) + 1]; // пользовательские картинки
-      const block = new Block(x, y, size, ringImg, true);
-      ringBlocks.push(block);
-    }
-  }
-}
-
-function drawStars() {
-  ctx.fillStyle = '#ffffff';
-  for (let i = 0; i < 800; i++) {
-    const x = Math.random() * w;
-    const y = Math.random() * h;
-    const size = Math.random() * 1.6;
-    ctx.globalAlpha = Math.random() * 0.7 + 0.3;
-    ctx.fillRect(x, y, size, size);
-  }
-  ctx.globalAlpha = 1;
-}
+// Новый параметр — вероятность рисования связи (50% меньше)
+const connectionChance = 0.48;   // 0.48 = примерно в 2 раза реже, чем раньше
 
 function resize() {
-  w = window.innerWidth;
-  h = window.innerHeight;
-  canvas.width = w;
-  canvas.height = h;
-  cx = w / 2;
-  cy = h / 2;
-  planetRadius = Math.min(w, h) * 0.41; // чуть крупнее для красоты
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Star {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = -60 - Math.random() * 180;
+        this.size = Math.random() * 37 + 20;
+        this.speed = Math.random() * 4.3 + 1.5;
+        this.opacity = 0.78 + Math.random() * 0.22;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.twinkle = Math.random() * Math.PI * 2;
+        this.isGrounded = false;
+        this.groundTime = 0;
+        this.lifeOnGround = 100 + Math.random() * 160;
+        this.imageIndex = Math.floor(Math.random() * starImages.length);
+    }
+
+    update() {
+        if (!this.isGrounded) {
+            this.y += this.speed;
+            this.twinkle += 0.09;
+            this.rotation += 0.017;
+
+            if (this.y >= canvas.height - groundHeight - 24) {
+                this.isGrounded = true;
+                this.y = canvas.height - groundHeight + (Math.random() * 28) - 14;
+                this.speed = 0;
+            }
+        } else {
+            this.twinkle += 0.042;
+            this.groundTime++;
+            if (this.groundTime > this.lifeOnGround) this.reset();
+        }
+    }
+
+    draw() {
+        if (!starImages[this.imageIndex]) return;
+        ctx.save();
+        const alpha = this.opacity * (0.74 + Math.sin(this.twinkle) * 0.26);
+        ctx.globalAlpha = alpha;
+
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+
+        const drawSize = this.size;
+        ctx.shadowBlur = this.isGrounded ? 19 : 33;
+        ctx.shadowColor = this.isGrounded ? "#ffeb99" : "#99e8ff";
+
+        ctx.drawImage(starImages[this.imageIndex], -drawSize/2, -drawSize/2, drawSize, drawSize);
+        ctx.restore();
+    }
+}
+
+function initStars() {
+    stars = [];
+    for (let i = 0; i < starCount; i++) {
+        const star = new Star();
+        star.y = Math.random() * canvas.height * 0.78;
+        if (Math.random() > 0.48) {
+            star.isGrounded = true;
+            star.groundTime = Math.random() * star.lifeOnGround;
+        }
+        stars.push(star);
+    }
+}
+
+function drawConstellations() {
+    ctx.beginPath();
+    ctx.lineWidth = 0.75;
+
+    for (let i = 0; i < stars.length; i++) {
+        const s1 = stars[i];
+        for (let j = i + 1; j < stars.length; j++) {
+            const s2 = stars[j];
+
+            const dx = s1.x - s2.x;
+            const dy = s1.y - s2.y;
+            const distance = Math.hypot(dx, dy);
+
+            if (distance < connectDistance && distance > 20) {
+                // 50% меньше связей + плавная прозрачность
+                if (Math.random() > connectionChance) continue;
+
+                const alpha = Math.pow(1 - distance / connectDistance, 1.5) * 0.33;
+                ctx.strokeStyle = `rgba(195, 235, 255, ${alpha})`;
+                
+                ctx.moveTo(s1.x, s1.y);
+                ctx.lineTo(s2.x, s2.y);
+            }
+        }
+    }
+    ctx.stroke();
 }
 
 function animate() {
-  // Тёмный космос с лёгким градиентом
-  const grad = ctx.createRadialGradient(cx, cy, planetRadius * 0.3, cx, cy, planetRadius * 3);
-  grad.addColorStop(0, '#0a001f');
-  grad.addColorStop(1, '#000000');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawConstellations();
 
-  // Звёзды
-  drawStars();
+    stars.forEach(star => {
+        star.update();
+        star.draw();
+    });
 
-  // Мягкое атмосферное свечение Сатурна (как на реальных фото)
-  ctx.shadowBlur = 120;
-  ctx.shadowColor = '#ffeecc';
-  ctx.fillStyle = 'rgba(255, 220, 180, 0.13)';
-  ctx.beginPath();
-  ctx.arc(cx, cy, planetRadius * 1.12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Сатурн с большими блоками из РЕАЛЬНОЙ фотки
-  planetBlocks.forEach(b => { b.update(); b.draw(); });
-
-  // Кольца с мелкими блоками
-  ringBlocks.forEach(b => { b.update(); b.draw(); });
-
-  // Лёгкое общее свечение колец
-  ctx.shadowBlur = 40;
-  ctx.shadowColor = '#ff88ff';
-  ctx.strokeStyle = 'rgba(255, 180, 255, 0.15)';
-  ctx.lineWidth = planetRadius * 0.06;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, planetRadius * 1.75, planetRadius * 0.29, Math.sin(Date.now()/8000)*0.04, 0, Math.PI*2);
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 }
 
-window.addEventListener('resize', () => {
-  resize();
-  if (images.length > 0) {
-    initPlanetBlocks();
-    initRingBlocks();
-  }
-});
-
-loadImages();
-resize();
-animate();
-
-// Клик — взрыв реальности
-canvas.addEventListener('click', () => {
-  planetBlocks.forEach(b => { b.speed *= 3.5; b.opacity = 0.6; });
-  ringBlocks.forEach(b => { 
-    b.speed = (Math.random() - 0.5) * 1.4; 
-    b.size *= 1.35;
-  });
-  setTimeout(() => {
-    planetBlocks.forEach(b => b.opacity = 1);
-  }, 800);
+// ==================== ЗАПУСК ====================
+preloadImages(() => {
+    console.log(`Загружено ${starImages.length} звёзд`);
+    initStars();
+    animate();
 });
 </script>
 </body>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Сатурн — реальная картинка в трансцендентальных блоках</title>
+  <style>
+    body { margin:0; background:#000; overflow:hidden; }
+    canvas { display:block; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let w, h, cx, cy, planetRadius;
+
+const images = [];
+const planetBlocks = [];   // большие блоки — как на реальной фотографии
+const ringBlocks = [];     // мелкие блоки в кольцах
+
+// === РЕАЛЬНЫЙ САТУРН + ТВОИ КАРТИНКИ ===
+const saturnBaseUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Saturn_during_Equinox.jpg/1200px-Saturn_during_Equinox.jpg'; // высококачественная NASA-фотка
+const userUrls = [
+  'https://picsum.photos/id/1015/600/600',
+  'https://picsum.photos/id/237/600/600',
+  'https://picsum.photos/id/870/600/600',
+  'https://picsum.photos/id/133/600/600',
+  // добавь сюда свои мемные/тёмные/хаотичные картинки — они будут в кольцах
+];
+
+function loadImages() {
+  // Сначала грузим реальную фотку Сатурна для планеты
+  const saturnImg = new Image();
+  saturnImg.crossOrigin = "anonymous";
+  saturnImg.src = saturnBaseUrl;
+  saturnImg.onload = () => {
+    images.push(saturnImg); // 0-й элемент — реальная картинка Сатурна
+    // Теперь грузим пользовательские для колец
+    let loaded = 0;
+    userUrls.forEach(src => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = src;
+      img.onload = () => {
+        images.push(img);
+        loaded++;
+        if (loaded === userUrls.length) {
+          initPlanetBlocks();
+          initRingBlocks();
+        }
+      };
+    });
+  };
+}
+
+class Block {
+  constructor(x, y, size, img, isRing = false) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.img = img;
+    this.angle = Math.random() * Math.PI * 2;
+    this.speed = (Math.random() - 0.5) * (isRing ? 0.14 : 0.022);
+    this.isRing = isRing;
+    this.distort = 0;
+    this.opacity = 1;
+  }
+  update() {
+    this.angle += this.speed;
+    this.distort = Math.sin(Date.now() / 160) * (this.isRing ? 2.8 : 1.2);
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = this.opacity;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    ctx.shadowBlur = this.isRing ? 22 : 35;
+    ctx.shadowColor = this.isRing ? '#ff00cc' : '#aaffff';
+
+    ctx.drawImage(this.img, 
+      -this.size/2 + this.distort, 
+      -this.size/2, 
+      this.size + this.distort*2, 
+      this.size
+    );
+    ctx.restore();
+  }
+}
+
+// ====================== БОЛЬШИЕ БЛОКИ НА САТУРНЕ (как реальная фотка) ======================
+function initPlanetBlocks() {
+  planetBlocks.length = 0;
+  const grid = 18;                    // чуть больше деталей, но блоки всё ещё крупные
+  const blockSize = (planetRadius * 2) / grid * 1.12;
+
+  const saturnImage = images[0]; // реальная фотка
+
+  for (let i = 0; i < grid; i++) {
+    for (let j = 0; j < grid; j++) {
+      const x = cx - planetRadius + i * blockSize + blockSize/2;
+      const y = cy - planetRadius + j * blockSize + blockSize/2;
+
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx*dx + dy*dy > planetRadius * planetRadius) continue;
+
+      // Берём кусочек из РЕАЛЬНОЙ фотки Сатурна
+      const block = new Block(x, y, blockSize, saturnImage, false);
+      planetBlocks.push(block);
+    }
+  }
+}
+
+// ====================== МЕЛКИЕ БЛОКИ В КОЛЬЦАХ (много и красиво) ======================
+function initRingBlocks() {
+  ringBlocks.length = 0;
+  const ringCount = 7;                // больше колец для реализма
+  const blocksPerRing = 320;          // ещё плотнее
+
+  for (let r = 0; r < ringCount; r++) {
+    const baseRadius = planetRadius * (1.42 + r * 0.17);
+    const ringWidth = planetRadius * 0.145;
+
+    // Cassini Division — настоящий разрыв в кольцах
+    const hasGap = r === 2 || r === 3;
+
+    for (let i = 0; i < blocksPerRing; i++) {
+      let angle = (i / blocksPerRing) * Math.PI * 2 + r * 0.35;
+
+      // Пропускаем сектор для разрыва (Cassini Division)
+      if (hasGap && angle % (Math.PI * 2) > 1.8 && angle % (Math.PI * 2) < 2.4) continue;
+
+      const offset = (Math.random() - 0.5) * ringWidth * 1.4;
+
+      const x = cx + Math.cos(angle) * baseRadius;
+      const y = cy + Math.sin(angle) * baseRadius * 0.31 + offset; // классический наклон
+
+      const size = planetRadius * (0.028 + Math.random() * 0.035); // очень мелкие
+
+      const ringImg = images[Math.floor(Math.random() * (images.length - 1)) + 1]; // пользовательские картинки
+      const block = new Block(x, y, size, ringImg, true);
+      ringBlocks.push(block);
+    }
+  }
+}
+
+function drawStars() {
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    const size = Math.random() * 1.6;
+    ctx.globalAlpha = Math.random() * 0.7 + 0.3;
+    ctx.fillRect(x, y, size, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function resize() {
+  w = window.innerWidth;
+  h = window.innerHeight;
+  canvas.width = w;
+  canvas.height = h;
+  cx = w / 2;
+  cy = h / 2;
+  planetRadius = Math.min(w, h) * 0.41; // чуть крупнее для красоты
+}
+
+function animate() {
+  // Тёмный космос с лёгким градиентом
+  const grad = ctx.createRadialGradient(cx, cy, planetRadius * 0.3, cx, cy, planetRadius * 3);
+  grad.addColorStop(0, '#0a001f');
+  grad.addColorStop(1, '#000000');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Звёзды
+  drawStars();
+
+  // Мягкое атмосферное свечение Сатурна (как на реальных фото)
+  ctx.shadowBlur = 120;
+  ctx.shadowColor = '#ffeecc';
+  ctx.fillStyle = 'rgba(255, 220, 180, 0.13)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, planetRadius * 1.12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Сатурн с большими блоками из РЕАЛЬНОЙ фотки
+  planetBlocks.forEach(b => { b.update(); b.draw(); });
+
+  // Кольца с мелкими блоками
+  ringBlocks.forEach(b => { b.update(); b.draw(); });
+
+  // Лёгкое общее свечение колец
+  ctx.shadowBlur = 40;
+  ctx.shadowColor = '#ff88ff';
+  ctx.strokeStyle = 'rgba(255, 180, 255, 0.15)';
+  ctx.lineWidth = planetRadius * 0.06;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, planetRadius * 1.75, planetRadius * 0.29, Math.sin(Date.now()/8000)*0.04, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', () => {
+  resize();
+  if (images.length > 0) {
+    initPlanetBlocks();
+    initRingBlocks();
+  }
+});
+
+loadImages();
+resize();
+animate();
+
+// Клик — взрыв реальности
+canvas.addEventListener('click', () => {
+  planetBlocks.forEach(b => { b.speed *= 3.5; b.opacity = 0.6; });
+  ringBlocks.forEach(b => { 
+    b.speed = (Math.random() - 0.5) * 1.4; 
+    b.size *= 1.35;
+  });
+  setTimeout(() => {
+    planetBlocks.forEach(b => b.opacity = 1);
+  }, 800);
+});
+</script>
+</body>
+</html>
